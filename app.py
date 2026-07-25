@@ -5,7 +5,7 @@ import os
 import asyncio
 
 TOKEN = "8576536563:AAEjIYNC0bjeHoAyum2MCPWvV3hJ8J1UN4s"
-RENDER_URL = "https://omidre-bot.onrender.com"
+RENDER_URL = "https://omidrea-1.onrender.com"
 
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
