@@ -1,0 +1,4 @@
+.env
+ww_data.json
+__pycache__/
+*.pyc
