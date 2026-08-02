@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 import asyncio
 
-TOKEN = "8576536563:AAEjIYNC0bjeHoAyum2MCPWvV3hJ8J1UN4s"
+TOKEN = "8642125258:AAFYNTNEP2MGkYvDuFVyl_SzaBqPfFX0chE"
 RENDER_URL = "https://omidrea-1.onrender.com"  # اینو با آدرس واقعی رندر عوض کن
 
 app = Flask(__name__)
