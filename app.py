@@ -6,7 +6,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 
 # ==================== CONFIG ====================
 BOT_TOKEN = "8642125258:AAFYNTNEP2MGkYvDuFVyl_SzaBqPfFX0chE"
-ADMIN_ID = 123456789
+ADMIN_ID = 7832771827
 
 # ==================== DATABASE ====================
 DB_PATH = "dart_cup.db"
@@ -77,8 +77,13 @@ def main_menu_keyboard(is_admin=False):
     keyboard = []
     keyboard.append([InlineKeyboardButton("🏆 جام و مسابقات", callback_data="cup_menu")])
     keyboard.append([InlineKeyboardButton("👤 پروفایل من", callback_data="my_profile")])
+    keyboard.append([InlineKeyboardButton("📊 رتبه بندی", callback_data="leaderboard")])
+    keyboard.append([InlineKeyboardButton("🎁 تقویتی های من", callback_data="my_boosters")])
+    keyboard.append([InlineKeyboardButton("📋 قوانین بازی", callback_data="rules")])
+    
     if is_admin:
         keyboard.append([InlineKeyboardButton("👑 پنل مدیریت", callback_data="admin_panel")])
+    
     return InlineKeyboardMarkup(keyboard)
 
 def cup_menu_keyboard(tournament_id):
@@ -111,16 +116,26 @@ def get_player_name(user):
         return user.full_name
     return "User " + str(user.id)
 
+def get_player_name_from_db(player):
+    if not player:
+        return "ناشناس"
+    if player["username"]:
+        return "@" + player["username"]
+    if player["full_name"]:
+        return player["full_name"]
+    return "User " + str(player["user_id"])
+
 def get_stages(total_players):
     stages = {
         2: ["فینال"],
         4: ["نیمه نهایی", "فینال"],
         8: ["یک چهارم نهایی", "نیمه نهایی", "فینال"],
         16: ["یک هشتم نهایی", "یک چهارم نهایی", "نیمه نهایی", "فینال"],
+        32: ["یک شانزدهم نهایی", "یک هشتم نهایی", "یک چهارم نهایی", "نیمه نهایی", "فینال"],
     }
-    for size, stage_list in sorted(stages.items(), reverse=True):
+    for size in [32, 16, 8, 4, 2]:
         if total_players >= size:
-            return stage_list
+            return stages[size]
     return ["مرحله ۱", "فینال"]
 
 # ==================== HANDLERS ====================
@@ -146,12 +161,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     is_admin = (user.id == ADMIN_ID)
     
+    # ========== منوی اصلی ==========
     if data == "main_menu":
         await query_data.edit_message_text(
             "📋 منوی اصلی:",
             reply_markup=main_menu_keyboard(is_admin)
         )
     
+    # ========== منوی جام ==========
     elif data == "cup_menu":
         tournament = query(
             "SELECT * FROM tournaments WHERE status IN ('open', 'active') ORDER BY id DESC LIMIT 1",
@@ -174,6 +191,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
             await query_data.edit_message_text("❌ هیچ جام فعالی وجود ندارد.", reply_markup=InlineKeyboardMarkup(keyboard))
     
+    # ========== ثبت نام ==========
     elif data.startswith("register_"):
         tournament_id = int(data.split("_")[1])
         tournament = query("SELECT * FROM tournaments WHERE id = ?", (tournament_id,), fetchone=True)
@@ -198,6 +216,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             await query_data.answer("⚠️ شما قبلا ثبت نام کرده اید!", show_alert=True)
     
+    # ========== پروفایل ==========
     elif data == "my_profile":
         player = query("SELECT * FROM players WHERE user_id = ?", (user.id,), fetchone=True)
         if player:
@@ -222,12 +241,149 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     
+    # ========== رتبه بندی ==========
+    elif data == "leaderboard":
+        players = query(
+            "SELECT * FROM players ORDER BY championships DESC, total_wins DESC LIMIT 10",
+            fetchall=True
+        )
+        text = "📊 رتبه بندی بازیکنان:\n\n"
+        for i, p in enumerate(players, 1):
+            name = get_player_name_from_db(p)
+            text += str(i) + ". " + name + "\n"
+            text += "   🏆 برد: " + str(p["total_wins"]) + " | 👑 قهرمانی: " + str(p["championships"]) + "\n\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== تقویتی های من ==========
+    elif data == "my_boosters":
+        boosters = query(
+            "SELECT * FROM boosters WHERE user_id = ? AND quantity > 0",
+            (user.id,), fetchall=True
+        )
+        
+        emoji_map = {"accuracy": "🎯", "power": "🔥", "luck": "🍀"}
+        name_map = {"accuracy": "دقت", "power": "قدرت", "luck": "شانس"}
+        
+        if boosters:
+            text = "🎁 تقویتی های شما:\n\n"
+            for b in boosters:
+                text += emoji_map.get(b["booster_type"], "") + " "
+                text += name_map.get(b["booster_type"], "") + ": "
+                text += str(b["quantity"]) + " عدد\n"
+        else:
+            text = "❌ شما هیچ تقویتی ندارید!"
+        
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== قوانین ==========
+    elif data == "rules":
+        text = (
+            "📋 قوانین جام حذفی دارت:\n\n"
+            "🎯 هر بازیکن ۵ پرتاب دارد\n"
+            "🎲 امتیازها تصادفی بین ۱ تا ۶۰ است\n"
+            "🏆 بازیکن با امتیاز بیشتر برنده می‌شود\n"
+            "🔄 برنده به مرحله بعد صعود می‌کند\n"
+            "👑 برنده فینال قهرمان جام می‌شود\n\n"
+            "🎁 تقویتی‌ها:\n"
+            "🎯 دقت: +۱۰ امتیاز\n"
+            "🔥 قدرت: +۱۵ امتیاز\n"
+            "🍀 شانس: امتیاز تصادفی ۱۰ تا ۳۰\n\n"
+            "⚠️ مساوی: پرتاب اضافه تا مشخص شدن برنده"
+        )
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== جدول مسابقات ==========
+    elif data.startswith("bracket_"):
+        tournament_id = int(data.split("_")[1])
+        tournament = query("SELECT * FROM tournaments WHERE id = ?", (tournament_id,), fetchone=True)
+        
+        if not tournament:
+            await query_data.answer("❌ جام یافت نشد!", show_alert=True)
+            return
+        
+        matches = query(
+            "SELECT * FROM matches WHERE tournament_id = ? ORDER BY match_order",
+            (tournament_id,), fetchall=True
+        )
+        
+        status_map = {"waiting": "⏳", "active": "🎯", "finished": "✅"}
+        
+        text = "📋 جدول مسابقات\n"
+        text += "🏆 " + tournament["name"] + "\n"
+        text += "📊 مرحله: " + tournament["stage"] + "\n\n"
+        
+        current_stage = None
+        for m in matches:
+            if m["stage"] != current_stage:
+                current_stage = m["stage"]
+                text += "\n--- " + current_stage + " ---\n\n"
+            
+            p1 = query("SELECT * FROM players WHERE user_id = ?", (m["player1_id"],), fetchone=True)
+            p2 = query("SELECT * FROM players WHERE user_id = ?", (m["player2_id"],), fetchone=True)
+            p1_name = get_player_name_from_db(p1)
+            p2_name = get_player_name_from_db(p2)
+            
+            text += status_map.get(m["status"], "❓") + " " + p1_name
+            text += " VS " + p2_name + "\n"
+            if m["status"] == "finished":
+                text += "   📊 " + str(m["player1_score"]) + " - " + str(m["player2_score"]) + "\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== قهرمان جام ==========
+    elif data.startswith("champion_"):
+        tournament_id = int(data.split("_")[1])
+        tournament = query("SELECT * FROM tournaments WHERE id = ?", (tournament_id,), fetchone=True)
+        
+        if tournament and tournament["winner_id"]:
+            winner = query("SELECT * FROM players WHERE user_id = ?", (tournament["winner_id"],), fetchone=True)
+            text = "👑 قهرمان جام\n\n"
+            text += "🏆 " + tournament["name"] + "\n\n"
+            text += "👤 " + get_player_name_from_db(winner) + "\n"
+        else:
+            text = "❌ هنوز قهرمانی مشخص نشده است!"
+        
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== مسابقه من ==========
+    elif data.startswith("my_match_"):
+        tournament_id = int(data.split("_")[2])
+        match = query(
+            "SELECT * FROM matches WHERE tournament_id = ? AND (player1_id = ? OR player2_id = ?) AND status != 'finished' ORDER BY id LIMIT 1",
+            (tournament_id, user.id, user.id), fetchone=True
+        )
+        
+        if not match:
+            await query_data.answer("❌ شما مسابقه فعالی ندارید!", show_alert=True)
+            return
+        
+        p1 = query("SELECT * FROM players WHERE user_id = ?", (match["player1_id"],), fetchone=True)
+        p2 = query("SELECT * FROM players WHERE user_id = ?", (match["player2_id"],), fetchone=True)
+        
+        text = "🎯 مسابقه شما\n\n"
+        text += "📊 مرحله: " + match["stage"] + "\n\n"
+        text += "👤 " + get_player_name_from_db(p1) + "\n"
+        text += "🆚\n"
+        text += "👤 " + get_player_name_from_db(p2) + "\n\n"
+        text += "📊 نتیجه: " + str(match["player1_score"]) + " - " + str(match["player2_score"]) + "\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== پنل ادمین ==========
     elif data == "admin_panel":
         if not is_admin:
             await query_data.answer("❌ شما دسترسی ندارید!", show_alert=True)
             return
         await query_data.edit_message_text("👑 پنل مدیریت جام:", reply_markup=admin_panel_keyboard())
     
+    # ========== ساخت جام ==========
     elif data == "create_tournament":
         if not is_admin:
             await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
@@ -236,6 +392,66 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("🔙 لغو", callback_data="admin_panel")]]
         await query_data.edit_message_text("📝 نام جام جدید را وارد کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
     
+    # ========== بازیکنان ثبت نامی ==========
+    elif data == "pending_players":
+        if not is_admin:
+            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
+            return
+        
+        tournament = query("SELECT * FROM tournaments WHERE status = 'open' ORDER BY id DESC LIMIT 1", fetchone=True)
+        if not tournament:
+            await query_data.answer("❌ هیچ جام فعالی وجود ندارد!", show_alert=True)
+            return
+        
+        pending = query(
+            "SELECT * FROM registrations WHERE tournament_id = ? AND status = 'pending'",
+            (tournament["id"],), fetchall=True
+        )
+        
+        if not pending:
+            text = "✅ هیچ بازیکنی در انتظار تایید نیست."
+            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
+        else:
+            text = "👥 بازیکنان در انتظار تایید:\n\n"
+            keyboard = []
+            for reg in pending:
+                player = query("SELECT * FROM players WHERE user_id = ?", (reg["user_id"],), fetchone=True)
+                player_name = get_player_name_from_db(player)
+                text += "👤 " + player_name + "\n"
+                keyboard.append([
+                    InlineKeyboardButton("✅ " + player_name, callback_data=f"approve_{reg['id']}"),
+                    InlineKeyboardButton("❌ رد", callback_data=f"reject_{reg['id']}")
+                ])
+            keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")])
+        
+        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # ========== تایید بازیکن ==========
+    elif data.startswith("approve_"):
+        if not is_admin:
+            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
+            return
+        reg_id = int(data.split("_")[1])
+        query("UPDATE registrations SET status = 'approved' WHERE id = ?", (reg_id,))
+        await query_data.answer("✅ بازیکن تایید شد!", show_alert=True)
+        # بازخوانی لیست
+        new_data = "pending_players"
+        query_data.data = new_data
+        await button_handler(update, context)
+    
+    # ========== رد بازیکن ==========
+    elif data.startswith("reject_"):
+        if not is_admin:
+            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
+            return
+        reg_id = int(data.split("_")[1])
+        query("DELETE FROM registrations WHERE id = ?", (reg_id,))
+        await query_data.answer("❌ بازیکن رد شد!", show_alert=True)
+        new_data = "pending_players"
+        query_data.data = new_data
+        await button_handler(update, context)
+
+    # ========== قرعه کشی ==========
     elif data == "draw_tournament":
         if not is_admin:
             await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
@@ -272,6 +488,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         query("UPDATE tournaments SET status = 'active', stage = ? WHERE id = ?", (current_stage, tournament["id"]))
         
+        # ارسال پیام به بازیکنان
+        for match in query("SELECT * FROM matches WHERE tournament_id = ? AND stage = ?",
+                           (tournament["id"], current_stage), fetchall=True):
+            p1 = match["player1_id"]
+            p2 = match["player2_id"]
+            
+            text = "🎯 مسابقه شما شروع شد!\n\n"
+            text += "🏆 " + tournament["name"] + "\n"
+            text += "📊 " + current_stage + "\n\n"
+            text += "برای شروع مسابقه روی دکمه زیر کلیک کنید:"
+            
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎯 شروع مسابقه", callback_data=f"play_match_{match['id']}")]
+            ])
+            
+            try:
+                await context.bot.send_message(chat_id=p1, text=text, reply_markup=keyboard)
+            except:
+                pass
+            
+            try:
+                await context.bot.send_message(chat_id=p2, text=text, reply_markup=keyboard)
+            except:
+                pass
+        
         await query_data.edit_message_text(
             "✅ قرعه کشی انجام شد!\n\n"
             "📊 مرحله: " + current_stage + "\n"
@@ -280,6 +521,143 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=admin_panel_keyboard()
         )
     
+    # ========== شروع مسابقه (بازی دارت) ==========
+    elif data.startswith("play_match_"):
+        match_id = int(data.split("_")[2])
+        match = query("SELECT * FROM matches WHERE id = ?", (match_id,), fetchone=True)
+        
+        if not match:
+            await query_data.answer("❌ مسابقه یافت نشد!", show_alert=True)
+            return
+        
+        if user.id not in [match["player1_id"], match["player2_id"]]:
+            await query_data.answer("❌ شما در این مسابقه نیستید!", show_alert=True)
+            return
+        
+        if match["status"] == "finished":
+            await query_data.answer("❌ این مسابقه تمام شده است!", show_alert=True)
+            return
+        
+        # شروع بازی
+        query("UPDATE matches SET status = 'active' WHERE id = ?", (match_id,))
+        
+        # شبیه‌سازی پرتاب دارت
+        p1_throws = [random.randint(1, 60) for _ in range(5)]
+        p2_throws = [random.randint(1, 60) for _ in range(5)]
+        
+        p1_total = sum(p1_throws)
+        p2_total = sum(p2_throws)
+        
+        # ذخیره پرتاب‌ها
+        for i, score in enumerate(p1_throws, 1):
+            query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
+                  (match_id, match["player1_id"], i, score))
+        
+        for i, score in enumerate(p2_throws, 1):
+            query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
+                  (match_id, match["player2_id"], i, score))
+        
+        # تعیین برنده (در صورت مساوی، پرتاب اضافه)
+        if p1_total == p2_total:
+            extra_p1 = random.randint(1, 60)
+            extra_p2 = random.randint(1, 60)
+            p1_total += extra_p1
+            p2_total += extra_p2
+            query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
+                  (match_id, match["player1_id"], 6, extra_p1))
+            query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
+                  (match_id, match["player2_id"], 6, extra_p2))
+        
+        winner_id = match["player1_id"] if p1_total > p2_total else match["player2_id"]
+        
+        query("UPDATE matches SET player1_score = ?, player2_score = ?, winner_id = ?, status = 'finished' WHERE id = ?",
+              (p1_total, p2_total, winner_id, match_id))
+        
+        # بروزرسانی آمار بازیکن
+        query("UPDATE players SET total_wins = total_wins + 1 WHERE user_id = ?", (winner_id,))
+        
+        # ارسال نتیجه
+        p1 = query("SELECT * FROM players WHERE user_id = ?", (match["player1_id"],), fetchone=True)
+        p2 = query("SELECT * FROM players WHERE user_id = ?", (match["player2_id"],), fetchone=True)
+        
+        result_text = "🎯 نتیجه مسابقه\n\n"
+        result_text += "🏆 " + get_player_name_from_db(p1) + "\n"
+        result_text += "پرتاب‌ها: " + " - ".join(str(s) for s in p1_throws) + "\n"
+        result_text += "مجموع: " + str(p1_total) + "\n\n"
+        result_text += "🆚\n\n"
+        result_text += "🏆 " + get_player_name_from_db(p2) + "\n"
+        result_text += "پرتاب‌ها: " + " - ".join(str(s) for s in p2_throws) + "\n"
+        result_text += "مجموع: " + str(p2_total) + "\n\n"
+        result_text += "👑 برنده: " + get_player_name_from_db(query("SELECT * FROM players WHERE user_id = ?", (winner_id,), fetchone=True))
+        
+        for uid in [match["player1_id"], match["player2_id"]]:
+            try:
+                await context.bot.send_message(chat_id=uid, text=result_text)
+            except:
+                pass
+        
+        # انتقال به مرحله بعد
+        tournament = query("SELECT * FROM tournaments WHERE id = ?", (match["tournament_id"],), fetchone=True)
+        all_matches = query("SELECT * FROM matches WHERE tournament_id = ? AND stage = ?",
+                            (match["tournament_id"], tournament["stage"]), fetchall=True)
+        
+        all_finished = all(m["status"] == "finished" for m in all_matches)
+        
+        if all_finished:
+            stages = get_stages(query("SELECT COUNT(*) as count FROM registrations WHERE tournament_id = ? AND status = 'approved'",
+                                      (match["tournament_id"],), fetchone=True)["count"])
+            
+            current_stage_index = stages.index(tournament["stage"]) if tournament["stage"] in stages else -1
+            
+            if current_stage_index + 1 < len(stages):
+                next_stage = stages[current_stage_index + 1]
+                winners = [m["winner_id"] for m in all_matches]
+                
+                if len(winners) >= 2:
+                    query("DELETE FROM matches WHERE tournament_id = ? AND stage = ?",
+                          (match["tournament_id"], next_stage))
+                    
+                    match_order = 0
+                    for i in range(0, len(winners), 2):
+                        if i + 1 < len(winners):
+                            query(
+                                "INSERT INTO matches (tournament_id, stage, player1_id, player2_id, match_order) VALUES (?, ?, ?, ?, ?)",
+                                (match["tournament_id"], next_stage, winners[i], winners[i+1], match_order)
+                            )
+                            match_order += 1
+                    
+                    query("UPDATE tournaments SET stage = ? WHERE id = ?", (next_stage, match["tournament_id"]))
+                    
+                    for new_match in query("SELECT * FROM matches WHERE tournament_id = ? AND stage = ?",
+                                           (match["tournament_id"], next_stage), fetchall=True):
+                        for uid in [new_match["player1_id"], new_match["player2_id"]]:
+                            try:
+                                await context.bot.send_message(
+                                    chat_id=uid,
+                                    text="🎉 شما به مرحله " + next_stage + " صعود کردید!\n\n"
+                                    "🏆 " + tournament["name"] + "\n\n"
+                                    "منتظر شروع مسابقه باشید."
+                                )
+                            except:
+                                pass
+                else:
+                    # فینال تموم شده
+                    champion = winners[0]
+                    query("UPDATE tournaments SET status = 'finished', winner_id = ? WHERE id = ?",
+                          (champion, match["tournament_id"]))
+                    query("UPDATE players SET championships = championships + 1 WHERE user_id = ?", (champion,))
+                    
+                    try:
+                        await context.bot.send_message(
+                            chat_id=champion,
+                            text="👑 تبریک! شما قهرمان جام " + tournament["name"] + " شدید!"
+                        )
+                    except:
+                        pass
+        
+        await query_data.answer("✅ مسابقه انجام شد!", show_alert=True)
+    
+    # ========== مشاهده مسابقات ==========
     elif data == "view_matches":
         tournament = query("SELECT * FROM tournaments WHERE status = 'active' ORDER BY id DESC LIMIT 1", fetchone=True)
         
@@ -297,100 +675,68 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for m in matches:
                 p1 = query("SELECT * FROM players WHERE user_id = ?", (m["player1_id"],), fetchone=True)
                 p2 = query("SELECT * FROM players WHERE user_id = ?", (m["player2_id"],), fetchone=True)
-                p1_name = p1["full_name"] if p1 else "ناشناس"
-                p2_name = p2["full_name"] if p2 else "ناشناس"
+                p1_name = get_player_name_from_db(p1)
+                p2_name = get_player_name_from_db(p2)
                 
                 text += "🎯 مسابقه " + str(m["match_order"] + 1) + ":\n"
                 text += "👤 " + p1_name + " VS " + p2_name + "\n"
                 text += "📊 " + str(m["player1_score"]) + " - " + str(m["player2_score"]) + "\n"
                 if m["winner_id"]:
                     winner = query("SELECT * FROM players WHERE user_id = ?", (m["winner_id"],), fetchone=True)
-                    winner_name = winner["full_name"] if winner else "نامشخص"
-                    text += "🏆 برنده: " + winner_name + "\n"
+                    text += "🏆 برنده: " + get_player_name_from_db(winner) + "\n"
                 text += "وضعیت: " + status_map.get(m["status"], "نامشخص") + "\n\n"
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     
+    # ========== قهرمان ==========
     elif data == "view_champion":
         tournament = query("SELECT * FROM tournaments WHERE status = 'finished' ORDER BY id DESC LIMIT 1", fetchone=True)
         
         if tournament and tournament["winner_id"]:
             winner = query("SELECT * FROM players WHERE user_id = ?", (tournament["winner_id"],), fetchone=True)
-            winner_name = winner["full_name"] if winner else "نامشخص"
             text = "👑 قهرمان جام " + tournament["name"] + "\n\n"
-            text += "🏆 " + winner_name + "\n"
+            text += "🏆 " + get_player_name_from_db(winner) + "\n"
         else:
             text = "❌ هنوز قهرمانی مشخص نشده است!"
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    elif data == "pending_players":
+    # ========== مدیریت تقویتی ها ==========
+    elif data == "manage_boosters":
         if not is_admin:
             await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
             return
         
-        tournament = query("SELECT * FROM tournaments WHERE status = 'open' ORDER BY id DESC LIMIT 1", fetchone=True)
-        if not tournament:
-            await query_data.answer("❌ هیچ جام فعالی وجود ندارد!", show_alert=True)
+        keyboard = [
+            [InlineKeyboardButton("🎯 دادن دقت", callback_data="give_accuracy")],
+            [InlineKeyboardButton("🔥 دادن قدرت", callback_data="give_power")],
+            [InlineKeyboardButton("🍀 دادن شانس", callback_data="give_luck")],
+            [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")],
+        ]
+        await query_data.edit_message_text("🎁 مدیریت تقویتی ها\n\nیک نوع را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif data.startswith("give_"):
+        if not is_admin:
+            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
             return
         
-        pending = query(
-            "SELECT * FROM registrations WHERE tournament_id = ? AND status = 'pending'",
-            (tournament["id"],), fetchall=True
+        booster_type = data.split("_")[1]
+        context.user_data["giving_booster"] = booster_type
+        context.user_data["booster_step"] = "select_player"
+        
+        await query_data.edit_message_text(
+            "👤 آیدی عددی بازیکن را وارد کنید:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 لغو", callback_data="manage_boosters")]])
         )
-        
-        if not pending:
-            text = "✅ هیچ بازیکنی در انتظار تایید نیست."
-            keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
-        else:
-            text = "👥 بازیکنان در انتظار تایید:\n\n"
-            keyboard = []
-            for reg in pending:
-                player = query("SELECT * FROM players WHERE user_id = ?", (reg["user_id"],), fetchone=True)
-                player_name = get_player_name_from_db(player)
-                text += "👤 " + player_name + "\n"
-                keyboard.append([
-                    InlineKeyboardButton("✅ " + player_name, callback_data=f"approve_{reg['id']}"),
-                    InlineKeyboardButton("❌ رد", callback_data=f"reject_{reg['id']}")
-                ])
-            keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")])
-        
-        await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    elif data.startswith("approve_"):
-        if not is_admin:
-            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
-            return
-        reg_id = int(data.split("_")[1])
-        query("UPDATE registrations SET status = 'approved' WHERE id = ?", (reg_id,))
-        await query_data.answer("✅ بازیکن تایید شد!", show_alert=True)
-        # بازگشت به لیست
-        await button_handler(update, context)
-    
-    elif data.startswith("reject_"):
-        if not is_admin:
-            await query_data.answer("❌ دسترسی غیرمجاز!", show_alert=True)
-            return
-        reg_id = int(data.split("_")[1])
-        query("DELETE FROM registrations WHERE id = ?", (reg_id,))
-        await query_data.answer("❌ بازیکن رد شد!", show_alert=True)
-        await button_handler(update, context)
 
-def get_player_name_from_db(player):
-    if not player:
-        return "ناشناس"
-    if player["username"]:
-        return "@" + player["username"]
-    if player["full_name"]:
-        return player["full_name"]
-    return "User " + str(player["user_id"])
-
+# ==================== TEXT HANDLER ====================
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
     
+    # ساخت جام جدید
     if context.user_data.get("creating_tournament") and user.id == ADMIN_ID:
         context.user_data["tournament_name"] = text
         context.user_data["creating_tournament"] = False
@@ -398,6 +744,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ نام جام: " + text + "\n\n📝 حالا تعداد نفرات را وارد کنید:")
         return
     
+    # تنظیم ظرفیت
     if context.user_data.get("setting_capacity") and user.id == ADMIN_ID:
         try:
             capacity = int(text)
@@ -419,6 +766,57 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except ValueError:
             await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید!")
+        return
+    
+    # دادن تقویتی - انتخاب بازیکن
+    if context.user_data.get("booster_step") == "select_player" and user.id == ADMIN_ID:
+        try:
+            target_id = int(text)
+            context.user_data["booster_target"] = target_id
+            context.user_data["booster_step"] = "select_quantity"
+            await update.message.reply_text("✅ بازیکن انتخاب شد.\n\n📝 تعداد را وارد کنید:")
+        except ValueError:
+            await update.message.reply_text("❌ لطفا یک آیدی عددی معتبر وارد کنید!")
+        return
+    
+    # دادن تقویتی - انتخاب تعداد
+    if context.user_data.get("booster_step") == "select_quantity" and user.id == ADMIN_ID:
+        try:
+            quantity = int(text)
+            if quantity < 1:
+                await update.message.reply_text("❌ حداقل ۱!")
+                return
+            
+            target_id = context.user_data["booster_target"]
+            booster_type = context.user_data["giving_booster"]
+            
+            existing = query("SELECT * FROM boosters WHERE user_id = ? AND booster_type = ?",
+                             (target_id, booster_type), fetchone=True)
+            
+            if existing:
+                query("UPDATE boosters SET quantity = quantity + ? WHERE user_id = ? AND booster_type = ?",
+                      (quantity, target_id, booster_type))
+            else:
+                query("INSERT INTO boosters (user_id, booster_type, quantity) VALUES (?, ?, ?)",
+                      (target_id, booster_type, quantity))
+            
+            emoji_map = {"accuracy": "🎯", "power": "🔥", "luck": "🍀"}
+            name_map = {"accuracy": "دقت", "power": "قدرت", "luck": "شانس"}
+            
+            context.user_data["booster_step"] = None
+            context.user_data["giving_booster"] = None
+            context.user_data["booster_target"] = None
+            
+            await update.message.reply_text(
+                "✅ تقویتی داده شد!\n\n"
+                + emoji_map.get(booster_type, "") + " " + name_map.get(booster_type, "") + "\n"
+                "👤 به بازیکن: " + str(target_id) + "\n"
+                "📦 تعداد: " + str(quantity),
+                reply_markup=admin_panel_keyboard()
+            )
+        except ValueError:
+            await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید!")
+        return
 
 # ==================== MAIN ====================
 def main():
