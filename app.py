@@ -817,18 +817,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید!")
         return
-
 # ==================== MAIN ====================
-def main():
-    init_db()
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    
-    print("🤖 ربات جام حذفی دارت راه اندازی شد!")
-    app.run_polling()
-
 if __name__ == "__main__":
-    main()
+    init_db()
+    
+    # اجرای ربات در Thread
+    import threading
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Flask در Thread اصلی (مهم برای Render)
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🌐 Server running on port {port}")
+    flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
