@@ -1,12 +1,22 @@
 import sqlite3
 import random
-import asyncio
+import os
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
 # ==================== CONFIG ====================
 BOT_TOKEN = "8642125258:AAFYNTNEP2MGkYvDuFVyl_SzaBqPfFX0chE"
 ADMIN_ID = 7832771827
+RENDER_URL = "https://omidrea-1.onrender.com"  # آدرس سرویس رندر
+
+# ==================== FLASK ====================
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return "OK"
 
 # ==================== DATABASE ====================
 DB_PATH = "dart_cup.db"
@@ -150,6 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎯 به ربات جام حذفی دارت خوش آمدید!\n\n"
         "👤 " + get_player_name(user) + "\n\n"
+        "🌐 سرور: " + RENDER_URL + "\n\n"
         "از منوی زیر انتخاب کنید:",
         reply_markup=main_menu_keyboard(is_admin)
     )
@@ -164,7 +175,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ========== منوی اصلی ==========
     if data == "main_menu":
         await query_data.edit_message_text(
-            "📋 منوی اصلی:",
+            "📋 منوی اصلی:\n🌐 " + RENDER_URL,
             reply_markup=main_menu_keyboard(is_admin)
         )
     
@@ -185,11 +196,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "📊 مرحله: " + tournament["stage"] + "\n"
             text += "👥 تعداد بازیکنان: " + str(players_count) + "\n"
             text += "🎯 ظرفیت: " + str(tournament["capacity"]) + "\n"
+            text += "🌐 سرور: " + RENDER_URL + "\n"
             
             await query_data.edit_message_text(text, reply_markup=cup_menu_keyboard(tournament["id"]))
         else:
             keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
-            await query_data.edit_message_text("❌ هیچ جام فعالی وجود ندارد.", reply_markup=InlineKeyboardMarkup(keyboard))
+            await query_data.edit_message_text(
+                "❌ هیچ جام فعالی وجود ندارد.\n🌐 " + RENDER_URL,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     
     # ========== ثبت نام ==========
     elif data.startswith("register_"):
@@ -224,6 +239,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "🆔 نام: " + get_player_name(user) + "\n"
             text += "🏆 تعداد برد: " + str(player["total_wins"]) + "\n"
             text += "👑 تعداد قهرمانی: " + str(player["championships"]) + "\n"
+            text += "🌐 سرور: " + RENDER_URL + "\n"
             
             boosters = query("SELECT * FROM boosters WHERE user_id = ? AND quantity > 0",
                              (user.id,), fetchall=True)
@@ -252,6 +268,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = get_player_name_from_db(p)
             text += str(i) + ". " + name + "\n"
             text += "   🏆 برد: " + str(p["total_wins"]) + " | 👑 قهرمانی: " + str(p["championships"]) + "\n\n"
+        text += "🌐 " + RENDER_URL
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -291,7 +308,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎯 دقت: +۱۰ امتیاز\n"
             "🔥 قدرت: +۱۵ امتیاز\n"
             "🍀 شانس: امتیاز تصادفی ۱۰ تا ۳۰\n\n"
-            "⚠️ مساوی: پرتاب اضافه تا مشخص شدن برنده"
+            "⚠️ مساوی: پرتاب اضافه تا مشخص شدن برنده\n\n"
+            "🌐 " + RENDER_URL
         )
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="main_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -332,6 +350,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if m["status"] == "finished":
                 text += "   📊 " + str(m["player1_score"]) + " - " + str(m["player2_score"]) + "\n"
         
+        text += "\n🌐 " + RENDER_URL
+        
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     
@@ -347,6 +367,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "👤 " + get_player_name_from_db(winner) + "\n"
         else:
             text = "❌ هنوز قهرمانی مشخص نشده است!"
+        
+        text += "\n🌐 " + RENDER_URL
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -372,6 +394,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "🆚\n"
         text += "👤 " + get_player_name_from_db(p2) + "\n\n"
         text += "📊 نتیجه: " + str(match["player1_score"]) + " - " + str(match["player2_score"]) + "\n"
+        text += "\n🌐 " + RENDER_URL
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="cup_menu")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -381,7 +404,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_admin:
             await query_data.answer("❌ شما دسترسی ندارید!", show_alert=True)
             return
-        await query_data.edit_message_text("👑 پنل مدیریت جام:", reply_markup=admin_panel_keyboard())
+        await query_data.edit_message_text(
+            "👑 پنل مدیریت جام:\n🌐 " + RENDER_URL,
+            reply_markup=admin_panel_keyboard()
+        )
     
     # ========== ساخت جام ==========
     elif data == "create_tournament":
@@ -390,7 +416,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["creating_tournament"] = True
         keyboard = [[InlineKeyboardButton("🔙 لغو", callback_data="admin_panel")]]
-        await query_data.edit_message_text("📝 نام جام جدید را وارد کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query_data.edit_message_text(
+            "📝 نام جام جدید را وارد کنید:\n🌐 " + RENDER_URL,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     # ========== بازیکنان ثبت نامی ==========
     elif data == "pending_players":
@@ -409,7 +438,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if not pending:
-            text = "✅ هیچ بازیکنی در انتظار تایید نیست."
+            text = "✅ هیچ بازیکنی در انتظار تایید نیست.\n🌐 " + RENDER_URL
             keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
         else:
             text = "👥 بازیکنان در انتظار تایید:\n\n"
@@ -422,6 +451,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✅ " + player_name, callback_data=f"approve_{reg['id']}"),
                     InlineKeyboardButton("❌ رد", callback_data=f"reject_{reg['id']}")
                 ])
+            text += "\n🌐 " + RENDER_URL
             keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")])
         
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -434,7 +464,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reg_id = int(data.split("_")[1])
         query("UPDATE registrations SET status = 'approved' WHERE id = ?", (reg_id,))
         await query_data.answer("✅ بازیکن تایید شد!", show_alert=True)
-        # بازخوانی لیست
         new_data = "pending_players"
         query_data.data = new_data
         await button_handler(update, context)
@@ -450,7 +479,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_data = "pending_players"
         query_data.data = new_data
         await button_handler(update, context)
-
+    
     # ========== قرعه کشی ==========
     elif data == "draw_tournament":
         if not is_admin:
@@ -497,7 +526,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = "🎯 مسابقه شما شروع شد!\n\n"
             text += "🏆 " + tournament["name"] + "\n"
             text += "📊 " + current_stage + "\n\n"
-            text += "برای شروع مسابقه روی دکمه زیر کلیک کنید:"
+            text += "برای شروع مسابقه روی دکمه زیر کلیک کنید:\n"
+            text += "🌐 " + RENDER_URL
             
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🎯 شروع مسابقه", callback_data=f"play_match_{match['id']}")]
@@ -517,11 +547,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ قرعه کشی انجام شد!\n\n"
             "📊 مرحله: " + current_stage + "\n"
             "👥 تعداد بازیکنان: " + str(len(player_list)) + "\n"
-            "🎯 تعداد مسابقات: " + str(match_order),
+            "🎯 تعداد مسابقات: " + str(match_order) + "\n"
+            "🌐 " + RENDER_URL,
             reply_markup=admin_panel_keyboard()
         )
     
-    # ========== شروع مسابقه (بازی دارت) ==========
+    # ========== شروع مسابقه ==========
     elif data.startswith("play_match_"):
         match_id = int(data.split("_")[2])
         match = query("SELECT * FROM matches WHERE id = ?", (match_id,), fetchone=True)
@@ -538,17 +569,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query_data.answer("❌ این مسابقه تمام شده است!", show_alert=True)
             return
         
-        # شروع بازی
         query("UPDATE matches SET status = 'active' WHERE id = ?", (match_id,))
         
-        # شبیه‌سازی پرتاب دارت
         p1_throws = [random.randint(1, 60) for _ in range(5)]
         p2_throws = [random.randint(1, 60) for _ in range(5)]
         
         p1_total = sum(p1_throws)
         p2_total = sum(p2_throws)
         
-        # ذخیره پرتاب‌ها
         for i, score in enumerate(p1_throws, 1):
             query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
                   (match_id, match["player1_id"], i, score))
@@ -557,7 +585,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query("INSERT INTO throws (match_id, player_id, throw_number, score) VALUES (?, ?, ?, ?)",
                   (match_id, match["player2_id"], i, score))
         
-        # تعیین برنده (در صورت مساوی، پرتاب اضافه)
         if p1_total == p2_total:
             extra_p1 = random.randint(1, 60)
             extra_p2 = random.randint(1, 60)
@@ -573,12 +600,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query("UPDATE matches SET player1_score = ?, player2_score = ?, winner_id = ?, status = 'finished' WHERE id = ?",
               (p1_total, p2_total, winner_id, match_id))
         
-        # بروزرسانی آمار بازیکن
         query("UPDATE players SET total_wins = total_wins + 1 WHERE user_id = ?", (winner_id,))
         
-        # ارسال نتیجه
         p1 = query("SELECT * FROM players WHERE user_id = ?", (match["player1_id"],), fetchone=True)
         p2 = query("SELECT * FROM players WHERE user_id = ?", (match["player2_id"],), fetchone=True)
+        winner = query("SELECT * FROM players WHERE user_id = ?", (winner_id,), fetchone=True)
         
         result_text = "🎯 نتیجه مسابقه\n\n"
         result_text += "🏆 " + get_player_name_from_db(p1) + "\n"
@@ -588,7 +614,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result_text += "🏆 " + get_player_name_from_db(p2) + "\n"
         result_text += "پرتاب‌ها: " + " - ".join(str(s) for s in p2_throws) + "\n"
         result_text += "مجموع: " + str(p2_total) + "\n\n"
-        result_text += "👑 برنده: " + get_player_name_from_db(query("SELECT * FROM players WHERE user_id = ?", (winner_id,), fetchone=True))
+        result_text += "👑 برنده: " + get_player_name_from_db(winner) + "\n"
+        result_text += "🌐 " + RENDER_URL
         
         for uid in [match["player1_id"], match["player2_id"]]:
             try:
@@ -604,9 +631,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         all_finished = all(m["status"] == "finished" for m in all_matches)
         
         if all_finished:
-            stages = get_stages(query("SELECT COUNT(*) as count FROM registrations WHERE tournament_id = ? AND status = 'approved'",
-                                      (match["tournament_id"],), fetchone=True)["count"])
+            total_players = query(
+                "SELECT COUNT(*) as count FROM registrations WHERE tournament_id = ? AND status = 'approved'",
+                (match["tournament_id"],), fetchone=True
+            )["count"]
             
+            stages = get_stages(total_players)
             current_stage_index = stages.index(tournament["stage"]) if tournament["stage"] in stages else -1
             
             if current_stage_index + 1 < len(stages):
@@ -636,12 +666,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     chat_id=uid,
                                     text="🎉 شما به مرحله " + next_stage + " صعود کردید!\n\n"
                                     "🏆 " + tournament["name"] + "\n\n"
-                                    "منتظر شروع مسابقه باشید."
+                                    "منتظر شروع مسابقه باشید.\n"
+                                    "🌐 " + RENDER_URL
                                 )
                             except:
                                 pass
                 else:
-                    # فینال تموم شده
                     champion = winners[0]
                     query("UPDATE tournaments SET status = 'finished', winner_id = ? WHERE id = ?",
                           (champion, match["tournament_id"]))
@@ -650,7 +680,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await context.bot.send_message(
                             chat_id=champion,
-                            text="👑 تبریک! شما قهرمان جام " + tournament["name"] + " شدید!"
+                            text="👑 تبریک! شما قهرمان جام " + tournament["name"] + " شدید!\n\n"
+                            "🌐 " + RENDER_URL
                         )
                     except:
                         pass
@@ -686,6 +717,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text += "🏆 برنده: " + get_player_name_from_db(winner) + "\n"
                 text += "وضعیت: " + status_map.get(m["status"], "نامشخص") + "\n\n"
         
+        text += "🌐 " + RENDER_URL
+        
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     
@@ -699,6 +732,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "🏆 " + get_player_name_from_db(winner) + "\n"
         else:
             text = "❌ هنوز قهرمانی مشخص نشده است!"
+        
+        text += "\n🌐 " + RENDER_URL
         
         keyboard = [[InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")]]
         await query_data.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -715,7 +750,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🍀 دادن شانس", callback_data="give_luck")],
             [InlineKeyboardButton("🔙 بازگشت", callback_data="admin_panel")],
         ]
-        await query_data.edit_message_text("🎁 مدیریت تقویتی ها\n\nیک نوع را انتخاب کنید:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query_data.edit_message_text(
+            "🎁 مدیریت تقویتی ها\n\nیک نوع را انتخاب کنید:\n🌐 " + RENDER_URL,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     
     elif data.startswith("give_"):
         if not is_admin:
@@ -727,7 +765,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["booster_step"] = "select_player"
         
         await query_data.edit_message_text(
-            "👤 آیدی عددی بازیکن را وارد کنید:",
+            "👤 آیدی عددی بازیکن را وارد کنید:\n🌐 " + RENDER_URL,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 لغو", callback_data="manage_boosters")]])
         )
 
@@ -736,7 +774,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
     
-    # ساخت جام جدید
     if context.user_data.get("creating_tournament") and user.id == ADMIN_ID:
         context.user_data["tournament_name"] = text
         context.user_data["creating_tournament"] = False
@@ -744,7 +781,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ نام جام: " + text + "\n\n📝 حالا تعداد نفرات را وارد کنید:")
         return
     
-    # تنظیم ظرفیت
     if context.user_data.get("setting_capacity") and user.id == ADMIN_ID:
         try:
             capacity = int(text)
@@ -761,14 +797,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 "✅ جام جدید ساخته شد!\n\n"
                 "📋 نام: " + name + "\n"
-                "👥 ظرفیت: " + str(capacity) + " نفر",
+                "👥 ظرفیت: " + str(capacity) + " نفر\n"
+                "🌐 " + RENDER_URL,
                 reply_markup=admin_panel_keyboard()
             )
         except ValueError:
             await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید!")
         return
     
-    # دادن تقویتی - انتخاب بازیکن
     if context.user_data.get("booster_step") == "select_player" and user.id == ADMIN_ID:
         try:
             target_id = int(text)
@@ -779,7 +815,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ لطفا یک آیدی عددی معتبر وارد کنید!")
         return
     
-    # دادن تقویتی - انتخاب تعداد
     if context.user_data.get("booster_step") == "select_quantity" and user.id == ADMIN_ID:
         try:
             quantity = int(text)
@@ -811,23 +846,35 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ تقویتی داده شد!\n\n"
                 + emoji_map.get(booster_type, "") + " " + name_map.get(booster_type, "") + "\n"
                 "👤 به بازیکن: " + str(target_id) + "\n"
-                "📦 تعداد: " + str(quantity),
+                "📦 تعداد: " + str(quantity) + "\n"
+                "🌐 " + RENDER_URL,
                 reply_markup=admin_panel_keyboard()
             )
         except ValueError:
             await update.message.reply_text("❌ لطفا یک عدد معتبر وارد کنید!")
         return
+
+# ==================== RUN BOT ====================
+def run_bot():
+    init_db()
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    print("🤖 ربات جام حذفی دارت راه اندازی شد!")
+    print("🌐 آدرس: " + RENDER_URL)
+    app.run_polling()
+
 # ==================== MAIN ====================
 if __name__ == "__main__":
     init_db()
     
-    # اجرای ربات در Thread
-    import threading
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
+    # اجرای ربات در Thread جدا
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # Flask در Thread اصلی (مهم برای Render)
+    # اجرای Flask در Thread اصلی (مهم برای Render)
     port = int(os.environ.get("PORT", 10000))
-    print(f"🌐 Server running on port {port}")
+    print("🌐 Flask running on port " + str(port))
+    print("🌐 آدرس: " + RENDER_URL)
     flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
