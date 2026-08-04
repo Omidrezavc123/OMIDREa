@@ -239,24 +239,12 @@ def webhook():
 def home():
     return "OK"
 
-# ==================== SETUP WEBHOOK ====================
-async def setup_webhook():
-    await bot.initialize()  # این خط رو اضافه کن
-    await application.initialize()
-    await application.start()
-    await bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-
 def main():
     init_db()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_webhook())
-    loop.close()
-    
-    print("🤖 ربات با Webhook راه اندازی شد!")
+    print("🤖 ربات راه اندازی شد!")
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
