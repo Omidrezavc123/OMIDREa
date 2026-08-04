@@ -241,11 +241,11 @@ def home():
 
 # ==================== SETUP WEBHOOK ====================
 async def setup_webhook():
+    await bot.initialize()  # این خط رو اضافه کن
     await application.initialize()
     await application.start()
     await bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
 
-# ==================== MAIN ====================
 def main():
     init_db()
     application.add_handler(CommandHandler("start", start))
@@ -260,6 +260,3 @@ def main():
     print("🤖 ربات با Webhook راه اندازی شد!")
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
-
-if __name__ == "__main__":
-    main()
