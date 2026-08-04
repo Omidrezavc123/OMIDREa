@@ -20,6 +20,7 @@ application.add_handler(CommandHandler("start", start))
 def webhook():
     data = request.get_json()
     update = Update.de_json(data, bot)
+    # استفاده از loop سراسری
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(application.process_update(update))
@@ -31,7 +32,19 @@ def home():
     return "OK"
 
 if __name__ == "__main__":
-    # Webhook رو دستی تنظیم نکن - بذار با لینک دستی ست بشه
-    port = int(os.environ.get("PORT", 10000))
+    # initialize کردن application قبل از Flask
+    async def init_app():
+        await application.initialize()
+        await application.start()
+        await bot.initialize()
+        await bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
+        print("✅ Webhook set!")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(init_app())
+    loop.close()
+    
     print("🤖 ربات راه اندازی شد!")
+    port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
