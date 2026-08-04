@@ -2,14 +2,28 @@ import os
 from flask import Flask, request
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.request import HTTPXRequest
 import asyncio
 
 BOT_TOKEN = "8642125258:AAFYNTNEP2MGkYvDuFVyl_SzaBqPfFX0chE"
 RENDER_URL = "https://omidrea-1.onrender.com"
 
+# ==================== پروکسی ====================
+# یه پروکسی HTTP رایگان (اگه کار نکرد، عوضش کن)
+PROXY_URL = "http://103.129.222.98:8080"  # پروکسی HTTP رایگان
+
+# ساخت request با پروکسی
+request = HTTPXRequest(
+    proxy_url=PROXY_URL,
+    read_timeout=30,
+    write_timeout=30,
+    connect_timeout=30,
+    pool_timeout=30,
+)
+
 flask_app = Flask(__name__)
-bot = Bot(token=BOT_TOKEN)
-application = Application.builder().token(BOT_TOKEN).build()
+bot = Bot(token=BOT_TOKEN, request=request)
+application = Application.builder().token(BOT_TOKEN).request(request).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! ربات کار میکنه ✅")
@@ -20,7 +34,6 @@ application.add_handler(CommandHandler("start", start))
 def webhook():
     data = request.get_json()
     update = Update.de_json(data, bot)
-    # استفاده از loop سراسری
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(application.process_update(update))
@@ -32,7 +45,6 @@ def home():
     return "OK"
 
 if __name__ == "__main__":
-    # initialize کردن application قبل از Flask
     async def init_app():
         await application.initialize()
         await application.start()
