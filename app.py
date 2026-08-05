@@ -20,25 +20,31 @@ application.add_handler(CommandHandler("start", start))
 def webhook():
     data = request.get_json()
     update = Update.de_json(data, bot)
-    asyncio.run(application.process_update(update))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.process_update(update))
+    loop.close()
     return "OK"
 
 @flask_app.route("/")
 def home():
     return "OK"
 
-async def main():
-    await application.initialize()
-    await application.start()
-    await bot.initialize()
-    # پاک کردن webhook قبلی
-    await bot.delete_webhook()
-    # تنظیم webhook جدید
-    await bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print("✅ Webhook set!")
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    # initialize کردن application
+    async def setup():
+        await application.initialize()
+        await application.start()
+        await bot.initialize()
+        await bot.delete_webhook()  # پاک کردن webhook قبلی
+        await bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
+        print("✅ Webhook set!")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup())
+    loop.close()
+    
     print("🤖 ربات راه اندازی شد!")
     port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host="0.0.0.0", port=port)
+    flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
